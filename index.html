@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buzul Oyun Merkezi - Zıt Anlamlılar</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons (CDN) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Nunito', sans-serif; }
+        
+        /* Animasyonlar */
+        @keyframes snowfall {
+            0% { transform: translateY(-10px) translateX(0); opacity: 0; }
+            20% { opacity: 0.8; }
+            100% { transform: translateY(100vh) translateX(20px); opacity: 0.2; }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+        .animate-spin-slow { animation: spin 8s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* Kart Çevirme Efektleri (3D) */
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(147, 197, 253, 0.5); border-radius: 20px; }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-cyan-100 via-blue-200 to-blue-400 overflow-hidden select-none flex flex-col items-center justify-center">
+
+    <!-- Kar Efekti Konteyneri -->
+    <div id="snow-container" class="absolute inset-0 pointer-events-none z-0"></div>
+
+    <!-- Ana Uygulama Konteyneri -->
+    <div class="relative z-10 w-full max-w-2xl bg-white/20 backdrop-blur-2xl border border-white/60 rounded-3xl shadow-2xl p-4 md:p-8 flex flex-col min-h-[600px] m-4 transition-all duration-300">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6 border-b border-white/30 pb-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-500 p-2 rounded-xl text-white shadow-lg">
+                    <i data-lucide="snowflake" class="animate-spin-slow"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black text-blue-900 leading-none">Buzul</h1>
+                    <span class="text-xs text-blue-700 font-bold tracking-widest">OYUN MERKEZİ</span>
+                </div>
+            </div>
+            
+            <!-- Skor ve Süre (Oyun sırasında görünür) -->
+            <div id="game-stats" class="flex gap-3 hidden">
+                <div class="bg-white/60 px-3 py-1 rounded-full text-blue-900 font-bold flex items-center gap-2 border border-white/50">
+                    <i data-lucide="trophy" class="text-yellow-600 w-4 h-4"></i> <span id="score-display">0</span>
+                </div>
+                <div class="bg-red-100/80 px-3 py-1 rounded-full text-red-600 font-bold flex items-center gap-2 border border-red-200">
+                    <i data-lucide="clock" class="w-4 h-4"></i> <span id="timer-display">60</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Oyun İçi Çıkış Butonu -->
+        <div id="ingame-menu-btn" class="w-full flex justify-start mb-4 hidden">
+             <button onclick="returnToModeSelection()" class="flex items-center gap-2 text-blue-800 font-bold bg-white/40 hover:bg-white/60 px-3 py-1.5 rounded-lg transition-all text-sm border border-white/30 hover:shadow-md">
+                <i data-lucide="log-out" class="w-4 h-4"></i> Çıkış / Mod Seçimi
+             </button>
+        </div>
+
+        <!-- İÇERİK ALANI (Dinamik olarak değişecek) -->
+        <div id="app-content" class="flex-1 flex flex-col relative">
+            <!-- JavaScript burayı dolduracak -->
+        </div>
+
+    </div>
+
+    <!-- İMZA -->
+    <div class="absolute bottom-2 text-blue-900/60 text-xs font-bold tracking-widest uppercase z-10">
+        Arif Samet BAL
+    </div>
+
+    <!-- JAVASCRIPT KODLARI -->
+    <script>
+        // --- VERİTABANI ---
+        const synonymsDB = {
+            "cevap": ["yanıt"], "siyah": ["kara"], "beyaz": ["ak"], "kırmızı": ["al"],
+            "fakir": ["yoksul"], "zengin": ["varlıklı"], "ihtiyar": ["yaşlı"], "yaşlı": ["ihtiyar"],
+            "genç": ["toy", "delikanlı"], "okul": ["mektep"], "öğrenci": ["talebe"], "doktor": ["hekim"],
+            "yürek": ["kalp"], "kalp": ["yürek"], "armağan": ["hediye"], "hediye": ["armağan"],
+            "ulus": ["millet"], "millet": ["ulus"], "kelime": ["sözcük"], "cümle": ["tümce"],
+            "konuk": ["misafir"], "misafir": ["konuk"], "savaş": ["harp"], "barış": ["sulh"],
+            "cimri": ["pintis"], "cömert": ["eli açık"], "ıslak": ["yaş"], "kuru": ["nemsiz"],
+            "temiz": ["pak"], "kirli": ["pis"], "zor": ["güç"], "kolay": ["basit"],
+            "fayda": ["yarar"], "zarar": ["ziyan"], "özgür": ["hür"], "tutsak": ["esir"]
+        };
+
+        const antonymPairs = [
+            { word: "Acı", antonym: "Tatlı" }, { word: "Açık", antonym: "Kapalı" }, { word: "Ağır", antonym: "Hafif" },
+            { word: "Ak", antonym: "Kara" }, { word: "Aktif", antonym: "Pasif" }, { word: "Alçak", antonym: "Yüksek" },
+            { word: "Alt", antonym: "Üst" }, { word: "Artı", antonym: "Eksi" }, { word: "Aşağı", antonym: "Yukarı" },
+            { word: "Aynı", antonym: "Farklı" }, { word: "Az", antonym: "Çok" }, { word: "Barış", antonym: "Savaş" },
+            { word: "Başlamak", antonym: "Bitirmek" }, { word: "Beyaz", antonym: "Siyah" }, { word: "Büyük", antonym: "Küçük" },
+            { word: "Cesur", antonym: "Korkak" }, { word: "Cömert", antonym: "Cimri" }, { word: "Çalışkan", antonym: "Tembel" },
+            { word: "Çirkin", antonym: "Güzel" }, { word: "Dahil", antonym: "Hariç" }, { word: "Dar", antonym: "Geniş" },
+            { word: "Derin", antonym: "Sığ" }, { word: "Dolu", antonym: "Boş" }, { word: "Dost", antonym: "Düşman" },
+            { word: "Doğal", antonym: "Yapay" }, { word: "Doğu", antonym: "Batı" }, { word: "Duru", antonym: "Bulanık" },
+            { word: "Erken", antonym: "Geç" }, { word: "Eski", antonym: "Yeni" }, { word: "Evet", antonym: "Hayır" },
+            { word: "Fakir", antonym: "Zengin" }, { word: "Gelmek", antonym: "Gitmek" }, { word: "Genç", antonym: "Yaşlı" },
+            { word: "Gerçek", antonym: "Yalan" }, { word: "Girmek", antonym: "Çıkmak" }, { word: "Gülmek", antonym: "Ağlamak" },
+            { word: "Güney", antonym: "Kuzey" }, { word: "Hızlı", antonym: "Yavaş" }, { word: "Islak", antonym: "Kuru" },
+            { word: "İnce", antonym: "Kalın" }, { word: "İyi", antonym: "Kötü" }, { word: "Kâr", antonym: "Zarar" },
+            { word: "Katı", antonym: "Sıvı" }, { word: "Kolay", antonym: "Zor" }, { word: "Koyu", antonym: "Açık" },
+            { word: "Kurnaz", antonym: "Saf" }, { word: "Masum", antonym: "Suçlu" }, { word: "Nazik", antonym: "Kaba" },
+            { word: "Neşeli", antonym: "Üzgün" }, { word: "Ödül", antonym: "Ceza" }, { word: "Ön", antonym: "Arka" },
+            { word: "Pahalı", antonym: "Ucuz" }, { word: "Parlak", antonym: "Mat" }, { word: "Sabah", antonym: "Akşam" },
+            { word: "Sağ", antonym: "Sol" }, { word: "Sağlam", antonym: "Çürük" }, { word: "Sert", antonym: "Yumuşak" },
+            { word: "Sıcak", antonym: "Soğuk" }, { word: "Soru", antonym: "Cevap" }, { word: "Taze", antonym: "Bayat" },
+            { word: "Temiz", antonym: "Kirli" }, { word: "Usta", antonym: "Acemi" }, { word: "Uzun", antonym: "Kısa" },
+            { word: "Var", antonym: "Yok" }, { word: "Yerli", antonym: "Yabancı" }, { word: "Yokuş", antonym: "İniş" },
+            { word: "Aç", antonym: "Tok" }, { word: "Affetmek", antonym: "Cezalandırmak" }, { word: "Alıcı", antonym: "Satıcı" },
+            { word: "Artmak", antonym: "Azalmak" }, { word: "Aydınlık", antonym: "Karanlık" }, { word: "Bekâr", antonym: "Evli" },
+            { word: "Bencil", antonym: "Fedakâr" }, { word: "Bol", antonym: "Kıt" }, { word: "Boş", antonym: "Dolu" },
+            { word: "Bulmak", antonym: "Kaybetmek" }, { word: "Ceza", antonym: "Ödül" }, { word: "Cılız", antonym: "Gürbüz" },
+            { word: "Çarpma", antonym: "Bölme" }, { word: "Çekmek", antonym: "İtmek" }, { word: "Çift", antonym: "Tek" },
+            { word: "Çukur", antonym: "Tümsek" }, { word: "Dağınık", antonym: "Düzenli" }, { word: "Dahi", antonym: "Aptal" },
+            { word: "Darılmak", antonym: "Barışmak" }, { word: "Dert", antonym: "Derman" }, { word: "Dik", antonym: "Eğik" },
+            { word: "Doğru", antonym: "Yanlış" }, { word: "Donuk", antonym: "Parlak" }, { word: "Durgun", antonym: "Dalgalı" },
+            { word: "Eğri", antonym: "Düz" }, { word: "Erkek", antonym: "Kadın" }, { word: "Esaret", antonym: "Özgürlük" },
+            { word: "Galip", antonym: "Mağlup" }, { word: "Gece", antonym: "Gündüz" }, { word: "Gerilemek", antonym: "İlerlemek" },
+            { word: "Geri", antonym: "İleri" }, { word: "Gider", antonym: "Gelir" }, { word: "Gizli", antonym: "Açık" },
+            { word: "Ham", antonym: "Olgun" }, { word: "Hayal", antonym: "Gerçek" }, { word: "Hatırlamak", antonym: "Unutmak" },
+            { word: "Hırçın", antonym: "Uysal" }, { word: "İç", antonym: "Dış" }, { word: "İlk", antonym: "Son" },
+            { word: "İyimser", antonym: "Kötümser" }, { word: "Kalabalık", antonym: "Tenha" }, { word: "Kâr", antonym: "Zarar" },
+            { word: "Katı", antonym: "Sıvı" }, { word: "Kaybetmek", antonym: "Kazanmak" }, { word: "Kış", antonym: "Yaz" },
+            { word: "Korku", antonym: "Cesaret" }, { word: "Kör", antonym: "Gören" }, { word: "Kuru", antonym: "Yaş" },
+            { word: "Küsmek", antonym: "Barışmak" }, { word: "Medeni", antonym: "İlkel" }, { word: "Mevcut", antonym: "Yok" },
+            { word: "Minimum", antonym: "Maksimum" }, { word: "Negatif", antonym: "Pozitif" }, { word: "Neşe", antonym: "Keder" },
+            { word: "Ölü", antonym: "Diri" }, { word: "Özel", antonym: "Genel" }, { word: "Özgür", antonym: "Tutsak" },
+            { word: "Pahalı", antonym: "Ucuz" }, { word: "Perakende", antonym: "Toptan" }, { word: "Ret", antonym: "Kabul" },
+            { word: "Sabit", antonym: "Hareketli" }, { word: "Sade", antonym: "Gösterişli" }, { word: "Sahte", antonym: "Gerçek" },
+            { word: "Saygılı", antonym: "Saygısız" }, { word: "Sevinç", antonym: "Üzüntü" }, { word: "Sık", antonym: "Seyrek" },
+            { word: "Somut", antonym: "Soyut" }, { word: "Sığ", antonym: "Derin" }, { word: "Şişman", antonym: "Zayıf" },
+            { word: "Taze", antonym: "Kuru" }, { word: "Temiz", antonym: "Pis" }, { word: "Toplama", antonym: "Çıkarma" },
+            { word: "Tutsak", antonym: "Hür" }, { word: "Ucuz", antonym: "Pahalı" }, { word: "Unutmak", antonym: "Hatırlamak" },
+            { word: "Üretim", antonym: "Tüketim" }, { word: "Vahşi", antonym: "Evcil" }, { word: "Varış", antonym: "Kalkış" },
+            { word: "Yaramaz", antonym: "Uslu" }, { word: "Yardımsever", antonym: "Bencil" }, { word: "Yatay", antonym: "Dikey" },
+            { word: "Yaz", antonym: "Kış" }, { word: "Yerli", antonym: "Yabancı" }, { word: "Yıkmak", antonym: "Yapmak" },
+            { word: "Yiğit", antonym: "Korkak" }, { word: "Yokluk", antonym: "Varlık" }, { word: "Zayıf", antonym: "Şişman" },
+            { word: "Zemin", antonym: "Tavan" }, { word: "Zıt", antonym: "Eş" }, { word: "Zirve", antonym: "Dip" }
+        ];
+
+        // --- GLOBAL STATE ---
+        let state = {
+            view: 'menu', // menu, mode_selection, dictionary, playing_classic, playing_match, playing_type, result
+            score: 0,
+            timer: 60,
+            highScores: JSON.parse(localStorage.getItem('buzulSkorlari')) || { classic: 0, match: 0, type: 0 },
+            
+            // Oyun verileri
+            currentQuestion: null,
+            options: [],
+            matchCards: [],
+            selectedCards: [],
+            matchedPairs: [],
+            isProcessing: false,
+            userInput: "",
+            feedback: null // 'correct', 'wrong', null
+        };
+
+        let timerInterval = null;
+
+        // --- DOM ELEMENTLERİ ---
+        const contentDiv = document.getElementById('app-content');
+        const scoreDisplay = document.getElementById('score-display');
+        const timerDisplay = document.getElementById('timer-display');
+        const gameStats = document.getElementById('game-stats');
+        const ingameMenuBtn = document.getElementById('ingame-menu-btn');
+
+        // --- RENDER FONKSİYONLARI ---
+        function render() {
+            lucide.createIcons();
+            
+            // Header Stats Görünürlüğü
+            if (state.view.startsWith('playing_')) {
+                gameStats.classList.remove('hidden');
+                ingameMenuBtn.classList.remove('hidden');
+                scoreDisplay.textContent = state.score;
+                timerDisplay.textContent = state.timer;
+            } else {
+                gameStats.classList.add('hidden');
+                ingameMenuBtn.classList.add('hidden');
+            }
+
+            contentDiv.innerHTML = ''; // Temizle
+
+            if (state.view === 'menu') renderMenu();
+            else if (state.view === 'mode_selection') renderModeSelection();
+            else if (state.view === 'dictionary') renderDictionary();
+            else if (state.view === 'result') renderResult();
+            else if (state.view === 'playing_classic') renderClassicGame();
+            else if (state.view === 'playing_match') renderMatchGame();
+            else if (state.view === 'playing_type') renderTypeGame();
+
+            lucide.createIcons();
+        }
+
+        function renderMenu() {
+            contentDiv.innerHTML = `
+                <div class="flex-1 flex flex-col items-center justify-center space-y-6 animate-fade-in">
+                    <div class="text-center space-y-2">
+                        <h2 class="text-4xl font-bold text-blue-900 drop-shadow-sm">Kelime Bilgini Sına</h2>
+                        <p class="text-blue-800/80 max-w-md mx-auto">200'den fazla kelime çifti ile zıt anlamlılar dünyasını keşfet.</p>
+                    </div>
+                    
+                    <div class="w-full max-w-xs space-y-3">
+                        <button onclick="changeView('mode_selection')"
+                            class="w-full py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all font-bold text-xl flex items-center justify-center gap-3 group">
+                            <i data-lucide="play" class="fill-current group-hover:animate-pulse"></i> OYNA
+                        </button>
+
+                        <button onclick="changeView('dictionary')"
+                            class="w-full py-3 bg-white/50 text-blue-900 rounded-2xl border border-white/60 hover:bg-white/80 transition-all font-bold text-lg flex items-center justify-center gap-3">
+                            <i data-lucide="book"></i> SÖZLÜK
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderModeSelection() {
+            contentDiv.innerHTML = `
+                <div class="flex-1 flex flex-col gap-4 animate-fade-in h-full">
+                    <button onclick="changeView('menu')" class="self-start text-blue-800 hover:text-blue-600 flex items-center gap-1 font-bold text-sm mb-2">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i> Geri Dön
+                    </button>
+                    <h3 class="text-center text-xl font-bold text-blue-900 mb-4">Oyun Modunu Seç</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+                        <!-- Klasik -->
+                        <button onclick="startGame('playing_classic')" class="bg-gradient-to-b from-white/60 to-white/20 p-6 rounded-2xl border-2 border-white/50 hover:border-blue-400 hover:shadow-lg transition-all group text-left relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><i data-lucide="brain" width="80" height="80"></i></div>
+                            <div class="bg-blue-100 p-3 rounded-xl w-fit mb-3 text-blue-600 group-hover:scale-110 transition-transform"><i data-lucide="grid"></i></div>
+                            <h4 class="text-lg font-bold text-blue-900">Klasik Buzul</h4>
+                            <p class="text-sm text-blue-800/70 mt-1">Seçeneklerden doğru zıt anlamlıyı bul.</p>
+                            <div class="mt-4 text-xs font-bold text-yellow-700 bg-yellow-100/50 inline-block px-2 py-1 rounded">En Yüksek: ${state.highScores.classic}</div>
+                        </button>
+
+                        <!-- Eşleştirme -->
+                        <button onclick="startGame('playing_match')" class="bg-gradient-to-b from-white/60 to-white/20 p-6 rounded-2xl border-2 border-white/50 hover:border-cyan-400 hover:shadow-lg transition-all group text-left relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><i data-lucide="grid" width="80" height="80"></i></div>
+                            <div class="bg-cyan-100 p-3 rounded-xl w-fit mb-3 text-cyan-600 group-hover:scale-110 transition-transform"><i data-lucide="grid"></i></div>
+                            <h4 class="text-lg font-bold text-blue-900">Buz Kırma</h4>
+                            <p class="text-sm text-blue-800/70 mt-1">Kartları çevir, eşleri bul.</p>
+                            <div class="mt-4 text-xs font-bold text-yellow-700 bg-yellow-100/50 inline-block px-2 py-1 rounded">En Yüksek: ${state.highScores.match}</div>
+                        </button>
+
+                        <!-- Yazma -->
+                        <button onclick="startGame('playing_type')" class="bg-gradient-to-b from-white/60 to-white/20 p-6 rounded-2xl border-2 border-white/50 hover:border-indigo-400 hover:shadow-lg transition-all group text-left relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><i data-lucide="type" width="80" height="80"></i></div>
+                            <div class="bg-indigo-100 p-3 rounded-xl w-fit mb-3 text-indigo-600 group-hover:scale-110 transition-transform"><i data-lucide="type"></i></div>
+                            <h4 class="text-lg font-bold text-blue-900">Kar Fırtınası</h4>
+                            <p class="text-sm text-blue-800/70 mt-1">Cevabı klavyeyle yaz.</p>
+                            <div class="mt-4 text-xs font-bold text-yellow-700 bg-yellow-100/50 inline-block px-2 py-1 rounded">En Yüksek: ${state.highScores.type}</div>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDictionary() {
+            // Arama filtresi
+            const filteredPairs = antonymPairs.filter(p => 
+                p.word.toLocaleLowerCase('tr').includes(state.userInput.toLocaleLowerCase('tr')) || 
+                p.antonym.toLocaleLowerCase('tr').includes(state.userInput.toLocaleLowerCase('tr'))
+            );
+
+            let listHTML = filteredPairs.length > 0 ? filteredPairs.map(pair => `
+                <div class="flex justify-between items-center bg-white/60 p-3 rounded-lg hover:bg-white/90 transition-colors">
+                    <span class="font-bold text-blue-800">${pair.word}</span>
+                    <div class="h-px flex-1 bg-blue-200 mx-4"></div>
+                    <span class="font-bold text-cyan-700">${pair.antonym}</span>
+                </div>
+            `).join('') : `<div class="text-center text-blue-800/60 p-4">Kelime bulunamadı.</div>`;
+
+            contentDiv.innerHTML = `
+                <div class="flex-1 flex flex-col h-full animate-fade-in">
+                    <div class="flex justify-between items-center mb-4">
+                        <button onclick="changeView('menu')" class="text-blue-800 hover:text-blue-600 flex items-center gap-1 font-bold text-sm"><i data-lucide="chevron-left" class="w-4 h-4"></i> Ana Menü</button>
+                        <h3 class="text-xl font-bold text-blue-900">Kelime Sözlüğü</h3>
+                        <div class="w-16"></div>
+                    </div>
+                    <div class="relative mb-4">
+                        <input type="text" placeholder="Kelime ara..." value="${state.userInput}" 
+                            oninput="updateSearch(this.value)"
+                            class="w-full pl-10 pr-4 py-3 rounded-xl border border-white/50 bg-white/60 focus:bg-white text-blue-900 placeholder-blue-400 outline-none focus:ring-2 ring-blue-300">
+                        <i data-lucide="search" class="absolute left-3 top-3.5 text-blue-400 w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1 overflow-y-auto bg-white/40 rounded-xl border border-white/40 pr-1 max-h-[350px] custom-scrollbar">
+                        <div class="grid grid-cols-1 gap-1 p-2">
+                            ${listHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+            // Input focus kaybolmaması için değer set etme (render sonrası)
+            const input = document.querySelector('input');
+            if(input) {
+                input.focus();
+                // Cursor'ı sona taşı
+                const val = input.value; input.value = ''; input.value = val;
+            }
+        }
+
+        function renderResult() {
+            contentDiv.innerHTML = `
+                <div class="flex-1 flex flex-col items-center justify-center space-y-6 animate-fade-in">
+                    <div class="relative">
+                        <div class="absolute inset-0 bg-blue-400 blur-xl opacity-30 rounded-full"></div>
+                        <i data-lucide="trophy" class="text-yellow-500 relative z-10 animate-bounce w-20 h-20"></i>
+                    </div>
+                    
+                    <div class="text-center">
+                        <h2 class="text-3xl font-bold text-blue-900">Süre Doldu!</h2>
+                        <div class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500 mt-2">
+                            ${state.score}
+                        </div>
+                        <p class="text-blue-700 font-medium">Toplam Puan</p>
+                    </div>
+
+                    <button onclick="changeView('mode_selection')"
+                        class="w-full max-w-sm py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 font-bold text-lg">
+                        <i data-lucide="rotate-ccw"></i> Başka Bir Mod Dene
+                    </button>
+                </div>
+            `;
+        }
+
+        // --- KLASİK OYUN HTML ---
+        function renderClassicGame() {
+            if (!state.currentQuestion) return;
+            
+            const optionsHTML = state.options.map((opt, idx) => {
+                let statusClass = "bg-white/70 hover:bg-white text-blue-900 border-white";
+                if (state.feedback === 'correct' && opt === state.currentQuestion.antonym) 
+                    statusClass = "bg-green-500 text-white border-green-600 shadow-[0_0_15px_rgba(34,197,94,0.5)]";
+                else if (state.feedback === 'wrong' && opt !== state.currentQuestion.antonym) 
+                    statusClass = "opacity-50";
+                
+                return `
+                    <button onclick="handleClassicAnswer('${opt}')" ${state.feedback ? 'disabled' : ''}
+                        class="p-4 rounded-xl border-b-4 font-bold text-lg transition-all active:border-b-0 active:translate-y-1 ${statusClass}">
+                        ${opt}
+                    </button>
+                `;
+            }).join('');
+
+            contentDiv.innerHTML = `
+                <div class="flex-1 flex flex-col justify-center animate-slide-up">
+                    <div class="bg-white/40 p-8 rounded-2xl shadow-inner border border-white mb-6 text-center relative overflow-hidden">
+                        <span class="text-xs font-bold text-blue-500 uppercase tracking-widest">Kelime</span>
+                        <div class="text-4xl md:text-5xl font-black text-blue-900 mt-2">${state.currentQuestion.word}</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        ${optionsHTML}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- EŞLEŞTİRME OYUN HTML ---
+        function renderMatchGame() {
+            const gridHTML = state.matchCards.map(card => {
+                const isSelected = state.selectedCards.find(c => c.id === card.id);
+                const isMatched = state.matchedPairs.includes(card.pairId);
+                const isFlipped = isSelected || isMatched;
+                
+                const isPendingMatch = isSelected && state.selectedCards.length === 2 && state.selectedCards[0].pairId === state.selectedCards[1].pairId;
+                
+                let cardClass = `aspect-square md:aspect-video rounded-xl border-2 transition-all duration-300 transform transform-style-3d relative cursor-pointer `;
+                
+                if (isMatched) cardClass += 'opacity-0 scale-0 pointer-events-none ';
+                else cardClass += 'opacity-100 scale-100 ';
+
+                if (isFlipped) cardClass += 'rotate-y-180 bg-white ';
+                else cardClass += 'bg-gradient-to-br from-blue-400 to-cyan-600 border-blue-300 hover:brightness-110 ';
+
+                if (isPendingMatch) cardClass += 'border-green-400 ring-2 ring-green-300 bg-green-50 ';
+                else if(isFlipped) cardClass += 'border-blue-300 ';
+
+                const contentStyle = isFlipped ? "transform: rotateY(180deg);" : "";
+
+                return `
+                    <div onclick="handleCardClick('${card.id}')" class="${cardClass}">
+                        <div class="absolute inset-0 flex items-center justify-center backface-hidden">
+                             ${isFlipped ? 
+                                `<span class="font-bold text-blue-900 text-sm md:text-lg" style="${contentStyle}">${card.content}</span>` : 
+                                `<i data-lucide="snowflake" class="text-white/30 w-8 h-8 animate-pulse"></i>`
+                             }
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            contentDiv.innerHTML = `
+                <div class="flex-1 grid grid-cols-3 md:grid-cols-4 gap-3 animate-fade-in content-center">
+                    ${gridHTML}
+                </div>
+            `;
+        }
+
+        // --- YAZMA OYUN HTML ---
+        function renderTypeGame() {
+            if (!state.currentQuestion) return;
+
+            let inputClass = "w-full p-4 text-center text-2xl font-bold rounded-xl border-4 outline-none transition-colors ";
+            if (state.feedback === 'correct') inputClass += "border-green-400 bg-green-50 text-green-700";
+            else if (state.feedback === 'wrong') inputClass += "border-red-400 bg-red-50 text-red-700 animate-shake";
+            else inputClass += "border-blue-300 focus:border-blue-500 bg-white/80 text-blue-900";
+
+            contentDiv.innerHTML = `
+                <div class="flex-1 flex flex-col justify-center items-center animate-slide-up space-y-6">
+                    <div class="w-full text-center">
+                        <div class="text-sm font-bold text-blue-600 mb-2">BU KELİMENİN ZIT ANLAMLI NEDİR?</div>
+                        <div class="text-5xl font-black text-blue-900 drop-shadow-md mb-8">${state.currentQuestion.word}</div>
+                        
+                        <form onsubmit="handleTypeSubmit(event)" class="relative max-w-sm mx-auto">
+                            <input type="text" id="typeInput" value="${state.userInput}" 
+                                oninput="state.userInput = this.value"
+                                ${state.feedback ? 'disabled' : ''}
+                                class="${inputClass}" placeholder="Cevabı yaz..." autofocus autocomplete="off">
+                            <button type="submit" class="absolute right-2 top-2 bottom-2 bg-blue-500 hover:bg-blue-600 text-white px-4 rounded-lg font-bold transition-colors">
+                                Kontrol
+                            </button>
+                        </form>
+                        
+                        <div class="h-8 mt-4 flex justify-center items-center gap-2">
+                            ${state.feedback === 'correct' ? `<div class="text-green-600 font-bold flex items-center gap-2"><i data-lucide="check-circle" class="w-5 h-5"></i> Doğru! <span class="text-sm font-normal text-green-700 ml-2">(${state.currentQuestion.antonym})</span></div>` : ''}
+                            ${state.feedback === 'wrong' ? `<div class="text-red-600 font-bold flex items-center gap-2"><i data-lucide="x-circle" class="w-5 h-5"></i> Yanlış! Doğrusu: ${state.currentQuestion.antonym}</div>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-xs text-blue-800/60 bg-white/30 px-3 py-1 rounded-full">
+                        İpucu: Kelimenin eş anlamlısını yazarsan da kabul edilir.
+                    </div>
+                </div>
+            `;
+            // Focus koruma
+            if(!state.feedback) {
+                const inp = document.getElementById('typeInput');
+                if(inp) inp.focus();
+            }
+        }
+
+
+        // --- OYUN MANTIĞI & KONTROL ---
+
+        function changeView(newView) {
+            clearInterval(timerInterval);
+            state.view = newView;
+            if(newView === 'dictionary') state.userInput = "";
+            render();
+        }
+
+        function returnToModeSelection() {
+            changeView('mode_selection');
+        }
+
+        function updateSearch(val) {
+            state.userInput = val;
+            renderDictionary();
+        }
+
+        function startGame(mode) {
+            state.score = 0;
+            state.timer = mode === 'playing_match' ? 90 : 60;
+            state.view = mode;
+            state.feedback = null;
+            state.isProcessing = false;
+            state.userInput = "";
+
+            if (mode === 'playing_classic') generateClassicQuestion();
+            if (mode === 'playing_match') generateMatchGrid();
+            if (mode === 'playing_type') generateTypeQuestion();
+
+            render();
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (state.timer <= 0) {
+                    endGame(mode);
+                } else {
+                    state.timer--;
+                    // Sadece timer elementini güncelle, tüm render'ı çağırma (performans)
+                    if(document.getElementById('timer-display')) {
+                        document.getElementById('timer-display').textContent = state.timer;
+                    }
+                }
+            }, 1000);
+        }
+
+        function endGame(mode) {
+            clearInterval(timerInterval);
+            const modeKey = mode.replace('playing_', '');
+            if (state.score > state.highScores[modeKey]) {
+                state.highScores[modeKey] = state.score;
+                localStorage.setItem('buzulSkorlari', JSON.stringify(state.highScores));
+            }
+            state.view = 'result';
+            render();
+        }
+
+        // --- KLASİK LOGIC ---
+        function generateClassicQuestion() {
+            const questionPair = antonymPairs[Math.floor(Math.random() * antonymPairs.length)];
+            let wrongOptions = [];
+            while (wrongOptions.length < 3) {
+                const randomWrong = antonymPairs[Math.floor(Math.random() * antonymPairs.length)];
+                if (randomWrong.antonym !== questionPair.antonym && !wrongOptions.includes(randomWrong.antonym)) {
+                    wrongOptions.push(randomWrong.antonym);
+                }
+            }
+            state.currentQuestion = questionPair;
+            state.options = [...wrongOptions, questionPair.antonym].sort(() => Math.random() - 0.5);
+            state.feedback = null;
+        }
+
+        function handleClassicAnswer(selected) {
+            if (state.feedback) return;
+            if (selected === state.currentQuestion.antonym) {
+                state.score += 10;
+                state.feedback = 'correct';
+                render();
+                setTimeout(() => { generateClassicQuestion(); render(); }, 500);
+            } else {
+                state.feedback = 'wrong';
+                state.timer = Math.max(0, state.timer - 5);
+                render();
+                setTimeout(() => { generateClassicQuestion(); render(); }, 800);
+            }
+        }
+
+        // --- MATCH LOGIC ---
+        function generateMatchGrid() {
+            const shuffledPairs = [...antonymPairs].sort(() => 0.5 - Math.random()).slice(0, 6);
+            let cards = [];
+            shuffledPairs.forEach((pair, index) => {
+                cards.push({ id: `w-${index}`, content: pair.word, pairId: index, type: 'word' });
+                cards.push({ id: `a-${index}`, content: pair.antonym, pairId: index, type: 'antonym' });
+            });
+            state.matchCards = cards.sort(() => 0.5 - Math.random());
+            state.matchedPairs = [];
+            state.selectedCards = [];
+            state.isProcessing = false;
+        }
+
+        function handleCardClick(cardId) {
+            const card = state.matchCards.find(c => c.id === cardId);
+            if (state.isProcessing || state.selectedCards.length >= 2 || state.matchedPairs.includes(card.pairId) || state.selectedCards.find(c => c.id === card.id)) return;
+
+            state.selectedCards.push(card);
+            render(); // Flip animation shows up
+
+            if (state.selectedCards.length === 2) {
+                state.isProcessing = true;
+                const [c1, c2] = state.selectedCards;
+
+                if (c1.pairId === c2.pairId) {
+                    // Match
+                    state.score += 20;
+                    render(); // Show green ring
+
+                    setTimeout(() => {
+                        state.matchedPairs.push(c1.pairId);
+                        state.selectedCards = [];
+                        state.isProcessing = false;
+                        
+                        if (state.matchedPairs.length === 6) {
+                            setTimeout(() => { generateMatchGrid(); render(); }, 500);
+                            state.timer += 10;
+                        }
+                        render();
+                    }, 1000); // 1 saniye bekle
+                } else {
+                    // Mismatch
+                    setTimeout(() => {
+                        state.selectedCards = [];
+                        state.isProcessing = false;
+                        state.timer = Math.max(0, state.timer - 2);
+                        render();
+                    }, 1000);
+                }
+            }
+        }
+
+        // --- TYPE LOGIC ---
+        function generateTypeQuestion() {
+            state.currentQuestion = antonymPairs[Math.floor(Math.random() * antonymPairs.length)];
+            state.userInput = "";
+            state.feedback = null;
+        }
+
+        function handleTypeSubmit(e) {
+            e.preventDefault();
+            if (state.feedback) return;
+
+            const cleanInput = state.userInput.toLocaleLowerCase('tr').trim();
+            const cleanAnswer = state.currentQuestion.antonym.toLocaleLowerCase('tr');
+            const validSynonyms = synonymsDB[cleanAnswer] || [];
+            
+            if (cleanInput === cleanAnswer || validSynonyms.includes(cleanInput)) {
+                state.score += 15;
+                state.feedback = 'correct';
+                render();
+                setTimeout(() => { generateTypeQuestion(); render(); }, 600);
+            } else {
+                state.feedback = 'wrong';
+                state.timer = Math.max(0, state.timer - 5);
+                render();
+                setTimeout(() => { state.feedback = null; generateTypeQuestion(); render(); }, 800);
+            }
+        }
+
+        // --- INITIALIZATION ---
+        // Kar Yağışı Efekti
+        function createSnow() {
+            const container = document.getElementById('snow-container');
+            for(let i=0; i<30; i++) {
+                const flake = document.createElement('div');
+                flake.innerHTML = '<i data-lucide="snowflake"></i>';
+                flake.className = 'absolute text-white/30';
+                flake.style.left = Math.random() * 100 + '%';
+                flake.style.top = Math.random() * 100 + '%';
+                flake.style.animation = `snowfall ${Math.random() * 5 + 3}s linear infinite`;
+                flake.style.fontSize = (Math.random() * 20 + 10) + 'px';
+                container.appendChild(flake);
+            }
+        }
+
+        createSnow();
+        render(); // İlk render (Menü)
+
+    </script>
+</body>
+</html>
